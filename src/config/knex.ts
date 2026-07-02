@@ -2,6 +2,10 @@
 import knex, { type Knex as KnexInstance } from 'knex';
 import mysql2 from 'mysql2';
 import {Env} from '../types/env';
+
+// 全局单例缓存：整个Node进程只创建一个连接池
+let globalKnexInstance: KnexInstance | null = null;
+
 // 慢SQL阈值：毫秒
 const SLOW_SQL_THRESHOLD = 200;
 
@@ -74,8 +78,14 @@ function attachSqlLogger(db: KnexInstance, enableLog: boolean) {
 }
 
 export function createKnex(env: Env): KnexInstance {
+  // 进程内复用单例，不再重复创建连接池
+  if (globalKnexInstance) {
+    return globalKnexInstance;
+  }
+
   const client = env.DB_TYPE || 'pg';
   const enableLog = env.ENABLE_LOG=== 'true';
+  let db: KnexInstance;
 
   if (client === 'pg') {
     const connectionString = env.DATABASE_URL;
@@ -90,28 +100,25 @@ export function createKnex(env: Env): KnexInstance {
         ssl: { rejectUnauthorized: false },
         connectionTimeoutMillis: 10000,
       },
+      // Serverless最优配置：空闲释放所有连接，避免常驻占用
       pool: {
-        min: 2,
-        max: 10,
-        idleTimeoutMillis: 30000,
-        acquireTimeoutMillis: 10000,
+        min: 0,
+        max: 5,
+        idleTimeoutMillis: 10000,
+        acquireTimeoutMillis: 15000,
         afterCreate: (conn: any, done: Function) => {
           conn.query("SET TIME ZONE 'Asia/Shanghai'", (err: any) => {
             done(err, conn);
           });
         }
       },
-      acquireConnectionTimeout: 10000,
+      acquireConnectionTimeout: 15000,
       useNullAsDefault: true,
       debug: false,
     };
 
-    const db = knex(config);  
-    attachSqlLogger(db, enableLog);
-    return db;
-  }
-
-  if (client === 'mysql2') {
+    db = knex(config);
+  } else if (client === 'mysql2') {
     if (!env.DATABASE_URL) {
       throw new Error('DATABASE_URL is not configured');
     }
@@ -120,30 +127,34 @@ export function createKnex(env: Env): KnexInstance {
       client: 'mysql2',
       connection: env.DATABASE_URL,
       pool: {
-        min: 2,
-        max: 10,
-        idleTimeoutMillis: 30000,
-        acquireTimeoutMillis: 10000,
+        min: 0,
+        max: 5,
+        idleTimeoutMillis: 10000,
+        acquireTimeoutMillis: 15000,
       },
-      acquireConnectionTimeout: 10000,
+      acquireConnectionTimeout: 15000,
       useNullAsDefault: true,
       debug: false,
     };
 
-    const db = knex(config);
+    db = knex(config);
     const mysqlClient = db.client as any;
     mysqlClient.driver = mysql2;
-
-    attachSqlLogger(db, enableLog);
-    return db;
+  } else {
+    throw new Error(`不支持的数据库客户端: ${client}`);
   }
 
-  throw new Error(`不支持的数据库客户端: ${client}`);
+  attachSqlLogger(db, enableLog);
+  globalKnexInstance = db;
+  return db;
 }
 
 /**
- * 请求结束必须手动销毁连接池，释放当前请求内所有TCP套接字
+ * 进程销毁时全局释放连接池，不要单请求销毁
  */
-export async function destroyKnexInstance(db: KnexInstance) {
-  await db.destroy();
+export async function destroyKnexInstance() {
+  if (globalKnexInstance) {
+    await globalKnexInstance.destroy();
+    globalKnexInstance = null;
+  }
 }

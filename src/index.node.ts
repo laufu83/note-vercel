@@ -4,11 +4,11 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { handleOptionsCors } from "./utils/cors";
 import { dispatch } from "./route/router";
-import { createKnex } from "./config/knex";
+import { createKnex, destroyKnexInstance } from "./config/knex";
 
-// 统一做一次类型断言，全局复用，不要多处重复断言
+// 全局只初始化一次环境变量 + Knex连接池（单例复用）
 const env = process.env as unknown as Env;
-
+const knex = createKnex(env);
 const app = new Hono()
 
 // 全局OPTIONS跨域预检
@@ -16,26 +16,31 @@ app.options('*', (c) => {
   return handleOptionsCors()
 })
 
-// 新增：健康测试接口，用来验证服务是否正常运行
-app.get('/api/health', (c) => {
+// 健康测试接口：增加数据库连通性检测
+app.get('/api/health', async (c) => {
+  let dbStatus = "ok";
+  try {
+    await knex.raw("SELECT 1");
+  } catch (err) {
+    dbStatus = "fail";
+    console.error("数据库连通异常", err);
+  }
   return c.json({
     code: 0,
     msg: '服务运行正常',
     timestamp: Date.now(),
-    env: process.env.NODE_ENV || 'development'
+    env: process.env.NODE_ENV || 'development',
+    database: dbStatus
   })
 })
 
-// 所有业务路由转发，复用原有dispatch逻辑
+// 所有业务路由转发
 app.all('*', async (c) => {
   const res = await dispatch(c.req.raw, env);
   return res;
 });
 
-// 前端静态资源托管
-//app.use('/*', serveStatic({ root: './dist' }))
-
-// 仅本地开发启动端口监听，Vercel线上不走serve
+// 仅本地开发启动端口监听
 if (process.env.NODE_ENV !== 'production') {
   const PORT = Number(process.env.PORT) || 3000
   serve({
@@ -45,27 +50,34 @@ if (process.env.NODE_ENV !== 'production') {
   console.log(`服务已启动，监听端口: ${PORT}`)
 }
 
-// 封装原定时清理任务函数
+// 定时清理任务：复用全局knex，不再重复创建连接池
 export async function runScheduleCleanTask() {
-  // 直接使用已经断言好的 env，不再传原生 process.env
-  const knex = createKnex(env)
-  // 回收站过期笔记清理
+  // 直接使用全局已初始化的knex实例
   await knex("notes")
     .where("is_deleted", true)
     .where("delete_expired_at", "<", knex.fn.now(6))
     .del()
 
-  // 过期刷新令牌清理
   await knex("user_refresh_token")
     .where("expired_at", "<", knex.fn.now(6))
     .del()
   console.log('定时清理任务执行完成')
 }
 
-// CommonJS 导出给 Vercel 使用
+// 进程退出时销毁数据库连接池，释放TCP连接
+process.on('SIGTERM', async () => {
+  await destroyKnexInstance();
+  process.exit(0);
+})
+
+process.on('SIGINT', async () => {
+  await destroyKnexInstance();
+  process.exit(0);
+})
+
+// CommonJS 导出适配Vercel
 module.exports = app;
 
-// 如需服务内定时执行，安装 node-schedule 开启下面代码
+// 禁止在函数内常驻定时任务，Vercel冷启动会不断新建实例打爆连接
 // import schedule from 'node-schedule'
-// // 每天凌晨2点执行清理
 // schedule.scheduleJob('0 2 * * *', runScheduleCleanTask)
