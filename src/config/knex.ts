@@ -12,9 +12,11 @@ const SLOW_SQL_THRESHOLD = 200;
 /**
  * 拼接带参数完整可执行SQL，自动转义单引号、日期、null
  */
-function compileFullSql(sql: string, bindings: unknown[]): string {
+function compileFullSql(sql: string, bindings: unknown): string {
+  // 修复：确保bindings一定是数组
+  const params = Array.isArray(bindings) ? bindings : [];
   let fullSql = sql;
-  for (const val of bindings) {
+  for (const val of params) {
     let replaceVal: string;
     if (val === null || val === undefined) {
       replaceVal = 'NULL';
