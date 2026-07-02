@@ -1,11 +1,12 @@
 {
-  "version": 2,
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["hkg1"],
   "buildCommand": "tsc",
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "builds": [
     {
-      "src": "src/index.node.ts",
+      "src": "dist/api/index.node.js",
       "use": "@vercel/node",
       "config": {
         "maxDuration": 60
@@ -15,7 +16,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "src/index.node.ts"
+      "dest": "dist/src/index.node.js"
     }
   ]
 }
