@@ -1,19 +1,17 @@
 {
-  "build": {
-    "env": {
-      "NODE_ENV": "production"
-    }
-  },
+  "version": 2,
   "buildCommand": "tsc",
   "outputDirectory": "dist",
   "installCommand": "npm install",
-  "devCommand": "npm run dev",
-  "functions": {
-    "src/index.node.ts": {
-      "runtime": "nodejs24.x",
-      "maxDuration": 60
+  "builds": [
+    {
+      "src": "src/index.node.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
     }
-  },
+  ],
   "routes": [
     {
       "src": "/(.*)",
