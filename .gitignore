@@ -1,0 +1,23 @@
+# 依赖
+node_modules
+package-lock.json
+yarn.lock
+.wrangler
+# 构建产物
+dist
+build
+
+# 环境变量
+.env
+.env.*
+.dev.vars
+
+# 编辑器
+.idea
+.vscode
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db

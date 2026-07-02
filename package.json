@@ -1,0 +1,33 @@
+{
+  "name": "note-pg-redis-vercel",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.node.ts",
+    "build": "tsc",
+    "start": "node dist/index.node.js",
+    "migrate": "knex migrate:latest"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.12.0",
+    "@supabase/supabase-js": "^2.110.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "hono": "^4.0.0",
+    "ioredis": "^5.4.1",
+    "jose": "^5.6.3",
+    "knex": "^2.5.1",
+    "mysql2": "^3.11.0",
+    "pg": "^8.12.0",
+    "resend": "^4.1.1",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.19.43",
+    "@types/pg": "^8.11.10",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  }
+}
